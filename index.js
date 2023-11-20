@@ -205,6 +205,15 @@ async function run() {
                 clientSecret: paymentIntent.client_secret
             })
         })
+        app.get('/payments/:email',verifyToken, async(req, res) =>{
+            const email = req.params.email
+            if(req.params.email !== req.decoded.email){
+                return res.status(403).send({message: 'Forbidden Access'})
+            }
+            const query = { email: email}
+            const result = await paymentCollection.find(query).toArray()
+            res.send(result)
+        })
         app.post('/payments', async(req, res) =>{
             const payment = req.body
             const paymentResult = await paymentCollection.insertOne(payment)
@@ -217,6 +226,36 @@ async function run() {
             const deleteResult = await cartsCollection.deleteMany(query)
             res.send({paymentResult, deleteResult})
         })
+
+        //stats or analytics related api
+        app.get('/admin-stats',verifyToken, verifyAdmin, async(req, res) =>{
+            const users = await userCollection.estimatedDocumentCount()
+            const menuItems = await menuCollection.estimatedDocumentCount()
+            const orders = await paymentCollection.estimatedDocumentCount()
+
+            //this is not the best way to calculate total revenue(bangla system)
+            // const payments = await paymentCollection.find().toArray()
+            // const revenue = payments?.reduce((total, item) => total + item.price, 0)
+
+            //valo system
+            const result = await paymentCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,      //id: null mane shob gula data field, specific id dile specific field er upor operation hobe
+                        totalRevenue: {
+                            $sum: '$price'
+                        }
+                    }
+                }
+            ]).toArray()
+            const revenue = result.length>0 ? result[0].totalRevenue : 0
+
+            res.send({
+                users, menuItems, orders, revenue,
+            })
+        })
+
+        //order status
 
 
         // Send a ping to confirm a successful connection
