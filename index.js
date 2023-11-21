@@ -255,12 +255,63 @@ async function run() {
             })
         })
 
-        //order status
+        //order status related api
+        /***
+         * ----------------------------------
+         *          non efficient way
+         * ----------------------------------
+         * 1. load all the payments
+         * 2. for every menuItems id in every payments find the item from menu collection
+         * 3. for every item find the category and add the specific category price 
+         */
+
+        //using aggregate pipeline------efficient way
+        app.get('/order-stats',verifyToken, verifyAdmin, async(req, res) =>{
+            const result = await paymentCollection.aggregate([
+                {
+                    $unwind: '$menuItemIds'  //split the menuItemIds array into separate pieces and make separate paymentCollection object 
+                },
+                {
+                    $lookup: {
+                        from: 'menu',
+                        localField: 'menuItemIds',
+                        foreignField: '_id',
+                        as: 'menuItems'     // id onujayi data dhore dhore menuItems array field create kore dhukaye debe
+                    }
+                },
+                {
+                    $unwind: '$menuItems'   // array field bad dia directly menuItems er vitor data object dia debe
+                },
+                {
+                    $group: {
+                        _id: '$menuItems.category',
+                        quantity: {
+                            $sum: 1
+                        },
+                        revenue: {
+                            $sum: '$menuItems.price'
+                        }
+                    }
+                },
+                {
+                    $project:{
+                        _id: 0,
+                        category: '$_id',
+                        quantity: '$quantity',
+                        revenue: '$revenue'
+                    } 
+                }
+
+            ]).toArray()
+
+            res.send(result)
+        })
+
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
